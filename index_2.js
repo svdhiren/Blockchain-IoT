@@ -7,7 +7,7 @@ const URL = 'ws://localhost:7545' //Connection to the blockchain network.
 const web3 = new Web3(URL);
 
 app = express() //Create an app using express. Used while writing the apis.
-const port = process.env.PORT || 3001 //Port where the server listens for requests.
+const port = process.env.PORT || 3000 //Port where the server listens for requests.
 app.use(express.json()) //Parses the incoming data as json.
 
 
@@ -28,7 +28,7 @@ const init = async () => {
     //4. Send a transaction to the function "verify"
 
     // try{
-    //     var num = await sample.methods.without_parameters().call({from: process.env.address});
+    //     var num = await sample.methods.without_parameters().call({from: process.env.address2});
     // console.log("Current stored number is: ", num);
     // }
     // catch{
@@ -40,10 +40,10 @@ const init = async () => {
         
     try{
         const tx = sample.methods.register_gateway();
-        const gas = await tx.estimateGas({from: process.env.address});
+        const gas = await tx.estimateGas({from: process.env.address2});
         const gasPrice = await web3.eth.getGasPrice();
         const data = tx.encodeABI();
-        const nonce = await web3.eth.getTransactionCount(process.env.address);
+        const nonce = await web3.eth.getTransactionCount(process.env.address2);
 
         const signedTx = await web3.eth.accounts.signTransaction(
             {
@@ -53,7 +53,7 @@ const init = async () => {
             gasPrice,
             nonce,        
             },
-            process.env.PRIV_KEY
+            process.env.PRIV_KEY2
         );    
         try{
             var receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
@@ -62,13 +62,13 @@ const init = async () => {
             console.log("Return values are: ", values[0].returnValues._nonce);
 
             try{
-                var hash = web3.utils.soliditySha3('Message signing', 1234);
-                var sign = web3.eth.accounts.sign(hash, process.env.PRIV_KEY);
+                var hash = web3.utils.soliditySha3('Message signing', values[0].returnValues._nonce);
+                var sign = web3.eth.accounts.sign(hash, process.env.PRIV_KEY2);
                 console.log("Signature : ", sign.signature);    
                 
                 // console.log("Type of hash: ", typeof(hash));
                 // console.log("Type of sign: ", typeof(sign.signature));
-                var auth = await sample.methods.verify(sign.signature).call({from: process.env.address});
+                var auth = await sample.methods.verify(sign.signature).call({from: process.env.address2});
                 console.log("Verification status: ", auth);
             }
             catch
@@ -98,9 +98,9 @@ init();
 
 console.log("Calls with ganache checked !!");
 
-// sample.events.getNonce().on('data', eve => {
-//     console.log("Received an event: ", eve);
-// })
+sample.events.getNonce().on('data', eve => {
+    console.log("Received an event: ", eve);
+})
 
 //This is a sample api for testing through postman/frontend.
 app.get('/test', async (req, res) => {
