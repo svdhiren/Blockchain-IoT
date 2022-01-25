@@ -1,54 +1,88 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: .
 pragma solidity ^0.8.10;
 
 contract Sample {
     ///Blockchain state variables.
-    uint public number;
+
+    /* 'number' and 'str' are test variables */
+    uint public number = 10;
     string public str = "Hello";
+
+    // 'reg' is mapping which stores whether a gateway has registered or not.
     mapping(address => bool) reg;
+
+    // 'nonces' is a mapping which stores nonces for each registered gateway and changes with transaction.
     mapping(address => uint) nonces;
     
-    event test(string _str);
-    event getNonce(uint _nonce);
-    
+    //Test event to listen to in the script.
+    event test(string _str);        
 
-    function update() public {
-        number ++;
-    }
+    /*The below 3 functions are test functions.*/
 
-    function update_string(string memory _str) public {
-        str = _str;
-        if(keccak256(abi.encodePacked(str)) == keccak256(abi.encodePacked("yo")))
-            revert("Yayy, error ocurred");
-        emit test(str);
-    }
 
+    //Multiple value return.
     function without_parameters() public view returns (string memory str1, uint num1) {
             return (str, number);
     }
 
-    function update(uint _n) public returns (uint num1, string memory str1) {
-            number += _n;
-            return (number, str);
-    }    
-    
-    /// Check whether the message sender has been registered by the admin and send the nonce.
-    function register_gateway() public {
+    //Directly update the number by 'n'.
+    function update(uint _n) public {
+            number = _n;            
+    } 
+
+    //Test transaction to check working with signature.
+    function update_string(string memory _str, bytes memory signature) public {
         
-        // if(reg[msg.sender] != true)
-        //     revert("Not registered by the admin...");
-        uint non = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
-        nonces[msg.sender] = non;
-        emit getNonce(non);
+        bytes32 messageHash = keccak256(abi.encodePacked(_str, nonces[msg.sender]));
+        bool status = verify(signature, messageHash);
+        if(status == true)
+        {
+            if(keccak256(abi.encodePacked(str)) == keccak256(abi.encodePacked("yo")))
+            revert("Yayy, error ocurred");
+            str = _str;
+            nonces[msg.sender] = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
+            emit test("Verification success - String updated");
+        }
+        else
+            emit test("Verification failed - String not updated");
+
+        emit test(str);
+    }       
+    
+    //Function to retrieve nonce.
+    function getNonce() public view returns(uint nonce) {
+        if(reg[msg.sender] == true)
+            return nonces[msg.sender];
+        else
+            return 0;
+    }
+
+    /// Check whether the message sender has been registered by the admin and send the nonce.
+    function register_gateway(bytes memory signature) public {
+        
+        if(reg[msg.sender] == true)
+            emit test("Already registered...");
+        
+        bytes32 messageHash = keccak256(abi.encodePacked('Register'));
+        bool status = verify(signature, messageHash);
+        if(status == true)
+        {
+            //That means the signature has been verified.
+            reg[msg.sender] = true;
+            nonces[msg.sender] = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
+        }        
+        else
+        {
+            revert("Authentication failed...");
+        }
     }
 
 
 
     function verify(
-        bytes memory signature
-    ) public view returns (bool) {
-        uint nonce = nonces[msg.sender];
-        bytes32 messageHash = getMessageHash('Message signing', nonce);
+        bytes memory signature,
+        bytes32 messageHash        
+    ) public view returns (bool) {        
         bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
 
         return recoverSigner(ethSignedMessageHash, signature) == msg.sender;
