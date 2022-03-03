@@ -10,12 +10,29 @@ contract Sample {
 
     // 'reg' is mapping which stores whether a gateway has registered or not.
     mapping(address => bool) reg;
-
     // 'nonces' is a mapping which stores nonces for each registered gateway and changes with transaction.
     mapping(address => uint) nonces;
+    //This mapping stores whether the dev has been registered or not.
+    mapping(string => bool) dev_reg;
+
+    //This structure contains the device information.
+    struct Device {
+        string pubKey;
+        address gate;
+        uint nonce;
+    }
+
+    //Maps from the device id to device information which is contained in 'Device' struct.
+    mapping(string => Device) dev_info;
+    mapping(address => string[]) gate_dev;
     
     //Test event to listen to in the script.
-    event test(string _str);        
+    event test(string _str);  
+
+    //Utility function
+    function str_cmp(string memory _a, string memory _b) internal pure returns(bool fl){
+        return keccak256(abi.encodePacked(_a)) == keccak256(abi.encodePacked(_b));
+    }      
 
     /*The below 3 functions are test functions.*/
 
@@ -57,25 +74,108 @@ contract Sample {
             return 0;
     }
 
-    /// Check whether the message sender has been registered by the admin and send the nonce.
     function register_gateway(bytes memory signature) public {
         
         if(reg[msg.sender] == true)
             emit test("Already registered...");
-        
-        bytes32 messageHash = keccak256(abi.encodePacked('Register'));
-        bool status = verify(signature, messageHash);
-        if(status == true)
-        {
-            //That means the signature has been verified.
-            reg[msg.sender] = true;
-            nonces[msg.sender] = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
-        }        
-        else
-        {
-            revert("Authentication failed...");
+        else{
+            bytes32 messageHash = keccak256(abi.encodePacked('Register'));
+            bool status = verify(signature, messageHash);
+            if(status == true)
+            {
+                //That means the signature has been verified.
+                reg[msg.sender] = true;
+                nonces[msg.sender] = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
+            }        
+            else
+            {
+                revert("Registration failed...");
+            }
         }
     }
+
+    function register_device(string memory _devId, string memory _pub) public {
+        
+        if(dev_reg[_devId] == true)
+         emit test("Device already registered...");
+        else{                        
+            //Since the status has been verified, things to do are:
+            //1. Mark the device as registered.
+            dev_reg[_devId] = true;
+            //2. Create a new struct with the information.
+            Device memory dev;
+            dev.pubKey = _pub;
+            dev.gate = msg.sender;
+            dev.nonce = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
+            //3. Map the device id to the created struct.
+            dev_info[_devId] = dev;
+
+            //4. Also add the device id to the list of devices under the associated gatewyay.  
+            gate_dev[msg.sender].push(_devId);                                  
+        }
+    }
+
+    //Function to check whether device has been registered or not.
+    function check_device(string memory _devId) public view returns(bool status){                
+        return dev_reg[_devId];
+    }
+
+    function get_device_key(string memory _devId) public view returns(string memory){                
+        return dev_info[_devId].pubKey;
+    }
+
+
+    //The gateway adds the
+    function add_device_nonce(string memory _devId, uint _nonce) public {
+        //Check whether the gateway is registered.
+        //Also check whether the device is under this gateway.
+        if(reg[msg.sender] != true)
+        {
+            emit test("Gateway not registered...");
+            revert("Gateway not registered...");
+        }
+        
+        bool fl = false;
+        for(uint i=0;i<gate_dev[msg.sender].length;i++)
+        {
+            fl = str_cmp(_devId, gate_dev[msg.sender][i]);
+            if(fl)
+                break;
+        }
+
+        if(!fl)
+        {
+            emit test("Device not associated with this gateway....");
+            revert("Device not associated with this gateway...");
+        }    
+        
+        //Add a nonce for the device here.
+        dev_info[_devId].nonce = _nonce;   
+        emit test("Nonce successfully updated...");
+    }
+
+    function get_device_nonce(string memory _devId) public view returns(uint nonce){
+        //Check whether the gateway is registered.
+        //Also check whether the device is under this gateway.
+        if(reg[msg.sender] != true)                   
+            return 0;                    
+        
+        bool fl = false;
+        for(uint i=0;i<gate_dev[msg.sender].length;i++)
+        {
+            fl = str_cmp(_devId, gate_dev[msg.sender][i]);
+            if(fl)
+                break;
+        }
+
+        if(!fl)                    
+            return 0;           
+        
+        //Return nonce for the device here.
+        return dev_info[_devId].nonce;               
+    }
+    
+
 
 
 
