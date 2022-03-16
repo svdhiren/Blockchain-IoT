@@ -109,6 +109,10 @@ function verify(signature, pubK){
     return auth_status;
 }
 
+function check_request(){
+    
+}
+
 /*
     Gateway registration:
     1. Gateway can register itself by executing a transaction.
@@ -167,8 +171,17 @@ register().then((res) => {
 
 
 sample.events.test().on('data', eve => {
-    console.log("Received an event: ", eve.returnValues);
+    console.log("Received an event: ", eve.returnValues._str);
 })
+
+// sample.events.message({
+//     filter: {receiver: process.env.address},
+//     fromBlock: "latest"
+// }).on('data', eve => {
+//     console.log("Message received for the device: ", eve.returnValues.devId);
+//     let msg = sample.methods.getMessage().call({from: process.env.address});
+//     console.log("Message for the device: ", msg);
+// })
 
 /***************Below are mqtt listeners for requests from devices*************/
 client.on('message', async (topic, rcv) => {
@@ -185,13 +198,15 @@ client.on('message', async (topic, rcv) => {
         console.log("Data received: ", data);
         
         console.log("Registration request received from deviceId: ", data.devId);
+        let TS = new Date();
+        TS = TS.toString();
         // var nonce = await sample.methods.getNonce().call({from: process.env.address});
         // var hash = web3.utils.soliditySha3(data.devId, data.pubKey, nonce);
         // var sign = web3.eth.accounts.sign(hash, process.env.PRIV_KEY);
-        var ans = await create_transaction(
+        let ans = await create_transaction(
             sample.methods.register_device, 
             "Device register", 
-            [data.devId, data.pubKey]
+            [data.devId, data.pubKey, TS]
         );
         if(ans.error)
         {     
@@ -224,9 +239,21 @@ client.on('message', async (topic, rcv) => {
         console.log("Data received at gateway1/nonce: ", data);
 
         //First check whether the device is registered or not.
-        var check = await sample.methods.check_device(data.devId).call({from: process.env.address});
+        var dev_TS = await sample.methods.check_device(data.devId).call({from: process.env.address});
+        if(dev_TS === ""){
+            console.log("Device not registered...");
+            return;
+        }            
+        dev_TS = new Date(dev_TS);
+        
+        var cur_dev_TS = new Date(data.TS);
+        if(cur_dev_TS.getTime() < dev_TS.getTime())
+        {
+            console.log("Repeated request by the device!!");
+            return;
+        }
 
-        //Create a signature with latest timestamp
+        //Create a signature with latest timestamp of the gateway
         let date_obj = new Date();
         let time_stamp = date_obj.toString();
         let sign = sign_it(time_stamp);
@@ -238,7 +265,7 @@ client.on('message', async (topic, rcv) => {
 
         //nonce is returned as 0 if either gateway is not registered or device is not under this gateway.
         let nonce = await sample.methods.get_device_nonce(data.devId).call({from: process.env.address});
-        if(check && nonce !== 0)
+        if(nonce !== 0)
         {
             //If the device is registered then return the nonce.
             snd = {
@@ -247,6 +274,15 @@ client.on('message', async (topic, rcv) => {
                 nonce: nonce
             }            
             // console.log("Signature is: ", sign);
+            let ans = await create_transaction(
+                sample.methods.update_timestamp, 
+                "Time stamp update", 
+                [data.devId, cur_dev_TS.toString()]
+            );
+            if(!ans.error){
+                console.log("Updating timestamp...");
+                var receipt = await web3.eth.sendSignedTransaction(ans.tx.rawTransaction);
+            }                
             console.log("Sending nonce: ", snd);
             let pubKey = await sample.methods.get_device_key(data.devId).call({from: process.env.address});
             let enc_data = encrypt(snd, pubKey);
@@ -254,12 +290,14 @@ client.on('message', async (topic, rcv) => {
         }
         else
         {
-            snd = {
-                ...snd,
-                status: false
-            }
-            let enc_data = encrypt(snd, data.pubKey);
-            client.publish(data.devId, enc_data);
+            // snd = {
+            //     ...snd,
+            //     status: false
+            // }
+            // let pubKey = await sample.methods.get_device_key(data.devId).call({from: process.env.address});
+            // let enc_data = encrypt(snd, pubKey);
+            // client.publish(data.devId, enc_data);
+            console.log("Invalid gateway !!");
         }
     }
     else if(topic === "gateway1/auth")
@@ -272,8 +310,10 @@ client.on('message', async (topic, rcv) => {
         console.log("Data received at gateway1/auth: ", data);
 
         //Verify the message and then process the request.
-        let pubKey = await sample.methods.get_device_key(data.devId).call({from: process.env.address});
         let nonce = await sample.methods.get_device_nonce(data.devId).call({from: process.env.address});
+        if(nonce === 0)
+            console.log("Invalid gateway !!");
+        let pubKey = await sample.methods.get_device_key(data.devId).call({from: process.env.address});
 
         let pubKeyObj = ec.keyFromPublic(pubKey,"hex");
         let msgHash = sha3.keccak256(nonce + data.msg);

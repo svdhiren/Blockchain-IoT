@@ -20,6 +20,7 @@ contract Sample {
         string pubKey;
         address gate;
         uint nonce;
+        string TS;
     }
 
     //Maps from the device id to device information which is contained in 'Device' struct.
@@ -94,10 +95,15 @@ contract Sample {
         }
     }
 
-    function register_device(string memory _devId, string memory _pub) public {
+    function register_device(string memory _devId, string memory _pub, string memory _TS) public {
         
         if(dev_reg[_devId] == true)
-         emit test("Device already registered...");
+            emit test("Device already registered...");
+
+        else if(reg[msg.sender] != true){
+            emit test("Gateway not registered");
+            revert("Gateway not registered");
+        }
         else{                        
             //Since the status has been verified, things to do are:
             //1. Mark the device as registered.
@@ -107,6 +113,7 @@ contract Sample {
             dev.pubKey = _pub;
             dev.gate = msg.sender;
             dev.nonce = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
+            dev.TS = _TS;
             //3. Map the device id to the created struct.
             dev_info[_devId] = dev;
 
@@ -115,9 +122,17 @@ contract Sample {
         }
     }
 
-    //Function to check whether device has been registered or not.
-    function check_device(string memory _devId) public view returns(bool status){                
-        return dev_reg[_devId];
+    //Function to check whether device has been registered or not. If yes, returns the timestamp of the last request.
+    function check_device(string memory _devId) public view returns(string memory){                
+        if (dev_reg[_devId])
+            return dev_info[_devId].TS;
+        else
+            return "";
+    }
+
+    function update_timestamp(string memory _devId, string memory _TS) public {
+        dev_info[_devId].TS = _TS;
+        emit test("Timestamp updated...");
     }
 
     function get_device_key(string memory _devId) public view returns(string memory){                
