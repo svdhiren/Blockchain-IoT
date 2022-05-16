@@ -21,14 +21,27 @@ contract Sample {
         address gate;
         uint nonce;
         string TS;
+        string recvId;
     }
 
     //Maps from the device id to device information which is contained in 'Device' struct.
     mapping(string => Device) dev_info;
     mapping(address => string[]) gate_dev;
     
+
+    //The messsages associated with the gateway are stored in this data structure.
+    struct Message {
+        string from;
+        string to;
+        string msg_str;
+    }    
+    mapping(address => Message[]) msgs;
+
     //Test event to listen to in the script.
     event test(string _str);  
+    
+    //This is the event which the gateway listens for any notification of messages.
+    event receive_message(address indexed gateway, string devId);
 
     //Utility function
     function str_cmp(string memory _a, string memory _b) internal pure returns(bool fl){
@@ -114,6 +127,7 @@ contract Sample {
             dev.gate = msg.sender;
             dev.nonce = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;
             dev.TS = _TS;
+            dev.recvId = "";
             //3. Map the device id to the created struct.
             dev_info[_devId] = dev;
 
@@ -139,9 +153,58 @@ contract Sample {
         return dev_info[_devId].pubKey;
     }
 
+    function update_recipient(string memory _devId, string memory _recvId) public {
+        dev_info[_devId].recvId = _recvId;
+        emit test("Recipient updated...");
+    }
 
-    //The gateway adds the
-    function add_device_nonce(string memory _devId, uint _nonce) public {
+    function communicate(string memory _devId, string memory _msg) public {
+        
+        if(reg[msg.sender] != true)
+        {
+            emit test("Gateway not registered...");
+            revert("Gateway not registered...");
+        }
+        
+        bool fl = false;
+        for(uint i=0;i<gate_dev[msg.sender].length;i++)
+        {
+            fl = str_cmp(_devId, gate_dev[msg.sender][i]);
+            if(fl)
+                break;
+        }
+
+        if(!fl)
+        {
+            emit test("Device not associated with this gateway....");
+            revert("Device not associated with this gateway...");
+        }
+
+        string memory _recvId = dev_info[_devId].recvId;
+        //Now add the message under this gateway and emit the event.
+        Message memory message;
+        message.from = _devId;
+        message.to = _recvId;
+        message.msg_str = _msg;
+
+        //Add to the list of messages for the gateway.
+        msgs[dev_info[_recvId].gate].push(message);
+
+        //Clear the recipient id under the dev_info.
+        dev_info[_devId].recvId = "";
+
+        emit receive_message(dev_info[_recvId].gate, _recvId);
+    }
+
+    function getMessage() public view returns (string memory from, string memory _str){
+        
+        uint n = msgs[msg.sender].length;
+        return (msgs[msg.sender][n-1].from, msgs[msg.sender][n-1].msg_str);
+    }
+
+
+    //The gateway updates the nonce of the device after every authentication attempt.
+    function update_device_nonce(string memory _devId) public {
         //Check whether the gateway is registered.
         //Also check whether the device is under this gateway.
         if(reg[msg.sender] != true)
@@ -165,7 +228,7 @@ contract Sample {
         }    
         
         //Add a nonce for the device here.
-        dev_info[_devId].nonce = _nonce;   
+        dev_info[_devId].nonce = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, block.number)))%10000;   
         emit test("Nonce successfully updated...");
     }
 

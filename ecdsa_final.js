@@ -19,6 +19,9 @@ let signature = ec.sign(msgHash, privKey, "hex", { canonical: true });
 var sign_str = JSON.parse(JSON.stringify(signature));
 
 /* Print the generated private key, public key and the signature. */
+var today = new Date();
+
+console.log("Time: ", today.toString());
 console.log("Priv key: ", privKey);
 console.log("0x Priv key: ", privKey_0x);
 console.log("Pub key: ", pubKey);
