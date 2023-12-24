@@ -1,8 +1,9 @@
 Designing a Blockchain Based Fog Network for Secure Communication among IoT enabled Edge devices
+================================================================
 
 <img width="580" alt="image" src="https://github.com/svdhiren/Final-year-project/assets/84956418/7ea106f7-b6e1-4aa8-a850-632d718ca5f7">
 
-#Overview
+## Overview
 
 In the world of interconnected computers, servers, devices etc., Internet of Things(IoT)
 comes with benefits as wells as challenges. Authentication and secure communication are
